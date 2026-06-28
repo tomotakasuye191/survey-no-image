@@ -587,7 +587,6 @@ async function submitResults() {
     timeLog[currentScreen].duration = (Date.now() - timeLog[currentScreen].start) / 1000;
   }
 
-  // 各画面の滞在時間をまとめる
   const screenTimes = {
     welcome:    Math.round((timeLog['screen-welcome']?.duration    || 0) * 10) / 10,
     attributes: Math.round((timeLog['screen-attributes']?.duration || 0) * 10) / 10,
@@ -596,7 +595,6 @@ async function submitResults() {
     confirm:    Math.round((timeLog['screen-confirm']?.duration    || 0) * 10) / 10,
   };
 
-  // 各ラウンドの選択画面＋PCグリッド画面の滞在時間
   const roundTimes = state.rounds.map((count, i) => {
     const choiceKey = `screen-choice-r${i+1}`;
     const gridKey   = `screen-pcgrid-r${i+1}`;
@@ -621,34 +619,19 @@ async function submitResults() {
   console.log('送信データ:', JSON.stringify(payload));
 
   try {
-    // iframeを使ったフォーム送信（CORSを回避しつつGASにPOST）
-    const form = document.createElement('form');
-    form.method = 'POST';
-    form.action = GAS_URL;
-    form.target = 'hidden-iframe';
-    form.style.display = 'none';
-
-    const input = document.createElement('input');
-    input.type = 'hidden';
-    input.name = 'data';
-    input.value = JSON.stringify(payload);
-    form.appendChild(input);
-
-    const iframe = document.createElement('iframe');
-    iframe.name = 'hidden-iframe';
-    iframe.style.display = 'none';
-    document.body.appendChild(iframe);
-    document.body.appendChild(form);
-
-    await new Promise((resolve) => {
-      iframe.onload = resolve;
-      form.submit();
-      // タイムアウト保険（5秒）
-      setTimeout(resolve, 5000);
+    // URLパラメータにpayload全体をフラットに展開して送信
+    const params = new URLSearchParams();
+    Object.keys(payload).forEach(key => {
+      params.append(key, payload[key]);
     });
 
-    document.body.removeChild(form);
-    document.body.removeChild(iframe);
+    await fetch(GAS_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString()
+    });
+
     showScreen('screen-thanks');
   } catch(e) {
     console.error('送信エラー:', e);
