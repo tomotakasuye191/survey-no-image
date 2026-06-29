@@ -605,7 +605,31 @@ async function submitResults() {
     };
   });
 
-  const payload = {
+  // セッションIDを生成（分割送信を紐付けるため）
+  const sessionId = Date.now().toString(36) + Math.random().toString(36).substr(2,5);
+
+  // 送信関数（scriptタグGET）
+  function sendRequest(params) {
+    return new Promise(resolve => {
+      const url = GAS_URL + '?' + new URLSearchParams(params).toString();
+      const script = document.createElement('script');
+      script.src = url;
+      script.onload = resolve;
+      script.onerror = resolve; // GASはJSを返さないのでonerrorが正常
+      document.head.appendChild(script);
+      setTimeout(() => {
+        try { document.head.removeChild(script); } catch(e) {}
+        resolve();
+      }, 3000);
+    });
+  }
+
+  console.log('送信開始 sessionId:', sessionId);
+
+  // パート1：基本情報
+  await sendRequest({
+    part:            '1',
+    session_id:      sessionId,
     group:           GROUP,
     timestamp:       new Date().toISOString(),
     age:             state.attributes.age,
@@ -615,28 +639,19 @@ async function submitResults() {
     pc_knowledge:    state.extra.pc_knowledge,
     gadget_interest: state.extra.gadget_interest,
     satisfaction:    state.extra.satisfaction,
-    responses:       JSON.stringify(state.responses),
-    screen_times:    JSON.stringify(screenTimes),
-    round_times:     JSON.stringify(roundTimes)
-  };
+  });
 
-  console.log('送信データ:', JSON.stringify(payload));
+  // パート2：回答データ
+  await sendRequest({
+    part:         '2',
+    session_id:   sessionId,
+    responses:    JSON.stringify(state.responses),
+    screen_times: JSON.stringify(screenTimes),
+    round_times:  JSON.stringify(roundTimes),
+  });
 
-  // scriptタグでGETリクエスト（CORS完全回避）
-  const params = new URLSearchParams();
-  Object.keys(payload).forEach(key => params.append(key, payload[key]));
-  const url = GAS_URL + '?' + params.toString();
-
-  const script = document.createElement('script');
-  script.src = url;
-  script.onerror = () => console.log('script送信完了（onerrorは正常）');
-  document.head.appendChild(script);
-
-  // 3秒後に画面遷移
-  setTimeout(() => {
-    document.head.removeChild(script);
-    showScreen('screen-thanks');
-  }, 3000);
+  console.log('送信完了');
+  showScreen('screen-thanks');
 }
 </script>
 </body>
