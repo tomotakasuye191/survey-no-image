@@ -586,72 +586,59 @@ async function submitResults() {
     timeLog[currentScreen].duration = (Date.now() - timeLog[currentScreen].start) / 1000;
   }
 
-  const screenTimes = {
-    welcome:    Math.round((timeLog['screen-welcome']?.duration    || 0) * 10) / 10,
-    attributes: Math.round((timeLog['screen-attributes']?.duration || 0) * 10) / 10,
-    scenario:   Math.round((timeLog['screen-scenario']?.duration   || 0) * 10) / 10,
-    extra:      Math.round((timeLog['screen-extra']?.duration      || 0) * 10) / 10,
-    confirm:    Math.round((timeLog['screen-confirm']?.duration    || 0) * 10) / 10,
-  };
+  // 滞在時間（小数点1桁に丸める）
+  function t(key) { return Math.round((timeLog[key]?.duration || 0) * 10) / 10; }
 
-  const roundTimes = state.rounds.map((count, i) => {
-    const choiceKey = `screen-choice-r${i+1}`;
-    const gridKey   = `screen-pcgrid-r${i+1}`;
+  // ラウンドデータを展開（JSON文字列を使わない）
+  const sorted = [...state.responses].sort((a, b) => a.round - b.round);
+  const roundsSorted = state.rounds.slice().sort((a,b) => {
+    const ra = state.responses.find(r => r.count === a);
+    const rb = state.responses.find(r => r.count === b);
+    return (ra?.round||0) - (rb?.round||0);
+  });
+
+  const r = [0,1,2,3].map(i => sorted[i] || {});
+  const rt = [0,1,2,3].map(i => {
+    const round = i + 1;
     return {
-      round: i + 1,
-      count: count,
-      choice_sec: Math.round((timeLog[choiceKey]?.duration || 0) * 10) / 10,
-      grid_sec:   Math.round((timeLog[gridKey]?.duration   || 0) * 10) / 10,
+      choice_sec: Math.round((timeLog[`screen-choice-r${round}`]?.duration || 0) * 10) / 10,
+      grid_sec:   Math.round((timeLog[`screen-pcgrid-r${round}`]?.duration  || 0) * 10) / 10,
     };
   });
 
-  // セッションIDを生成（分割送信を紐付けるため）
-  const sessionId = Date.now().toString(36) + Math.random().toString(36).substr(2,5);
+  const params = {
+    ts:  new Date().toISOString(),
+    grp: GROUP,
+    age: state.attributes.age,
+    gen: state.attributes.gender,
+    os:  state.attributes.os,
+    exp: state.attributes.experience,
+    kn:  state.extra.pc_knowledge,
+    gi:  state.extra.gadget_interest,
+    sat: state.extra.satisfaction,
+    tw:  t('screen-welcome'),
+    ta:  t('screen-attributes'),
+    ts2: t('screen-scenario'),
+    te:  t('screen-extra'),
+    tc:  t('screen-confirm'),
+    r1n: r[0].count||'', r1cs: rt[0].choice_sec, r1gs: rt[0].grid_sec, r1c: r[0].choice||'', r1p: r[0].selected_pc||'',
+    r2n: r[1].count||'', r2cs: rt[1].choice_sec, r2gs: rt[1].grid_sec, r2c: r[1].choice||'', r2p: r[1].selected_pc||'',
+    r3n: r[2].count||'', r3cs: rt[2].choice_sec, r3gs: rt[2].grid_sec, r3c: r[2].choice||'', r3p: r[2].selected_pc||'',
+    r4n: r[3].count||'', r4cs: rt[3].choice_sec, r4gs: rt[3].grid_sec, r4c: r[3].choice||'', r4p: r[3].selected_pc||'',
+  };
 
-  // 送信関数（scriptタグGET）
-  function sendRequest(params) {
-    return new Promise(resolve => {
-      const url = GAS_URL + '?' + new URLSearchParams(params).toString();
-      const script = document.createElement('script');
-      script.src = url;
-      script.onload = resolve;
-      script.onerror = resolve; // GASはJSを返さないのでonerrorが正常
-      document.head.appendChild(script);
-      setTimeout(() => {
-        try { document.head.removeChild(script); } catch(e) {}
-        resolve();
-      }, 3000);
-    });
-  }
+  const url = GAS_URL + '?' + new URLSearchParams(params).toString();
+  console.log('送信URL長さ:', url.length);
 
-  console.log('送信開始 sessionId:', sessionId);
+  const script = document.createElement('script');
+  script.src = url;
+  script.onerror = () => console.log('送信完了（onerrorは正常）');
+  document.head.appendChild(script);
 
-  // パート1：基本情報
-  await sendRequest({
-    part:            '1',
-    session_id:      sessionId,
-    group:           GROUP,
-    timestamp:       new Date().toISOString(),
-    age:             state.attributes.age,
-    gender:          state.attributes.gender,
-    os:              state.attributes.os,
-    experience:      state.attributes.experience,
-    pc_knowledge:    state.extra.pc_knowledge,
-    gadget_interest: state.extra.gadget_interest,
-    satisfaction:    state.extra.satisfaction,
-  });
-
-  // パート2：回答データ
-  await sendRequest({
-    part:         '2',
-    session_id:   sessionId,
-    responses:    JSON.stringify(state.responses),
-    screen_times: JSON.stringify(screenTimes),
-    round_times:  JSON.stringify(roundTimes),
-  });
-
-  console.log('送信完了');
-  showScreen('screen-thanks');
+  setTimeout(() => {
+    try { document.head.removeChild(script); } catch(e) {}
+    showScreen('screen-thanks');
+  }, 3000);
 }
 </script>
 </body>
